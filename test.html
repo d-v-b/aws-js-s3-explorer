@@ -1,0 +1,239 @@
+<html lang="en">
+    <head>
+        <title>AWS S3 Explorer</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="shortcut icon" href="https://aws.amazon.com/favicon.ico">
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap.min.css" integrity="sha384-PmY9l28YgO4JwMKbTvgaS7XNZJ30MK9FAZjjzXtlqyZCqBY6X6bXIkM++IkyinN+" crossorigin="anonymous">
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap-theme.min.css" integrity="sha384-jzngWsPS6op3fgRCDTESqrEJwRKck+CILhJVO5VvaAZCq8JYf8HsR/HPpBOOPZfR" crossorigin="anonymous">
+        <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.9.0/css/all.css">
+        <link rel="stylesheet" href="https://cdn.datatables.net/1.10.19/css/dataTables.bootstrap.min.css">
+        <style type="text/css">
+            #wrapper {
+                padding-left: 0;
+            }
+    
+            #page-wrapper {
+                width: 100%;
+                padding: 5px 15px;
+            }
+    
+            #tb-s3objects {
+                width: 100% !Important;
+            }
+    
+            a {
+                color: #00B7FF;
+            }
+    
+            body {
+                font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+            }
+    
+            td {
+                font: 12px "Lucida Grande", Helvetica, Arial, sans-serif;
+            }
+    
+            .title {
+                padding: 6px 12px;
+            }
+    
+            .breadcrumb {
+                margin-bottom: 0;
+            }
+    
+            #navbuttons .btn {
+                padding: 3px 6px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <a id="foo" href="">"sup"</a>
+    </body>
+
+</html>
+<script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+<script type="text/javascript"> 
+
+/**
+ * @license
+ * Copyright 2016 Google Inc.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
+function swapQuotes(x) {
+    return x.replace(/['"]/g, s => {
+        return (s === '"' ? '\'' : '"');
+    });
+}
+function urlSafeStringifyString(x) {
+    return swapQuotes(JSON.stringify(swapQuotes(x)));
+}
+const URL_SAFE_COMMA = '_';
+function urlSafeStringify(x) {
+    if (typeof x === 'object') {
+        if (x === null) {
+            return 'null';
+        }
+        let toJSON = x['toJSON'];
+        if (typeof toJSON === 'function') {
+            return urlSafeStringify(toJSON.call(x));
+        }
+        if (Array.isArray(x)) {
+            let s = '[';
+            let size = x.length;
+            let i = 0;
+            if (i < size) {
+                s += urlSafeStringify(x[i]);
+                while (++i < size) {
+                    s += URL_SAFE_COMMA;
+                    s += urlSafeStringify(x[i]);
+                }
+            }
+            s += ']';
+            return s;
+        }
+        let s = '{';
+        let keys = Object.keys(x);
+        let first = true;
+        for (let key of keys) {
+            let value = x[key];
+            if (value === undefined) {
+                continue;
+            }
+            let valueString = urlSafeStringify(value);
+            if (!valueString) {
+                continue;
+            }
+            if (!first) {
+                s += URL_SAFE_COMMA;
+            }
+            else {
+                first = false;
+            }
+            s += urlSafeStringifyString(key);
+            s += ':';
+            s += valueString;
+        }
+        s += '}';
+        return s;
+    }
+    if (typeof x === 'string') {
+        return urlSafeStringifyString(x);
+    }
+    return JSON.stringify(x);
+}
+
+function encodeFragment(fragment) {
+    return encodeURI(fragment).replace(/[!'()*;,]/g, function (c) {
+        return '%' + c.charCodeAt(0).toString(16).toUpperCase();
+    });
+}
+
+class ViewerState{
+    constructor(dimensions, position, crossSectionOrientation, crossSectionScale, projectionOrientation, projectionScale,layers, selectedLayer
+    )
+    {
+        this.dimensions = dimensions;
+        this.position = position;
+        this.crossSectionOrientation = crossSectionOrientation;
+        this.crossSectionScale = crossSectionScale;
+        this.projectionScale = projectionOrientation;
+        this.projectionScale = projectionScale;
+        this.layers = layers;
+        this.selectedLayer = selectedLayer;
+    }
+}
+
+class Transform {
+    constructor(matrix, outputDimensions, inputDimensions)
+    {
+        this.matrix = matrix;
+        this.outputDimensions = outputDimensions;
+        this.inputDimensions = inputDimensions;
+    }
+}
+
+class Layer {
+    constructor(type, source, tab, skeletonRendering, shader, name, blend)
+    {
+        this.type = type;
+        this.source = source;
+        this.tab = tab;
+        this.skeletonRendering = skeletonRendering;
+        this.shader = shader;
+        this.name = name;
+        this.blend = blend;
+    }
+}
+
+class DimensionXYZ {
+    constructor(x,y,z) 
+    {
+     this.x = x;
+     this.y = y;
+     this.z = z;
+    }
+}
+
+var neuroglancerAddress = "http://neuroglancer-demo.appspot.com/#!"
+var bucketURL = "https://janelia-cosem-dev.s3.amazonaws.com/"
+var datasetName = "test.n5"
+var sourceURLs = {
+    raw: "n5://" + bucketURL + datasetName + "/raw",
+    gt : "n5://" + bucketURL + datasetName + "/gt"
+    };
+
+
+var grayscaleShader = "void main() {\\n  emitGrayscale(pow(toNormalized(getDataValue()), 6.0));\\n}\\n"
+
+var transforms = {"raw": new Transform(matrix=[[1, 0, 0, 1000], [0, 1, 0, 1000], [0, 0, 1, 1000]], 
+                  outputDimensions={"x": [1e-09, "m"], "y": [1e-09, "m"], "z": [1e-09, "m"]}, 
+                  inputDimensions={"x": [4e-09, "m"], "y": [4e-09, "m"], "z": [4e-09, "m"]}),
+                  "gt": new Transform(matrix=[[1, 0, 0, 1100], [0, 1, 0, 1100], [0, 0, 1, 1100]], 
+                  outputDimensions={"x": [1e-09, "m"], "y": [1e-09, "m"], "z": [1e-09, "m"]}, 
+                  inputDimensions={"x": [2e-09, "m"], "y": [2e-09, "m"], "z": [2e-09, "m"]})}
+
+
+var layers = [new Layer(type="image",
+                        source={"url": sourceURLs.raw, "transform": transforms.raw},
+                        tab="source",
+                        skeletonRendering=undefined,
+                        shader=grayscaleShader,
+                        name="raw",
+                        blend="default"),
+                        new Layer(type="segmentation",
+                        source={"url": sourceURLs.gt, "transform": transforms.gt},
+                        tab="source",                                                  
+                        skeletonRendering = {"mode2d": "lines_and_points", "mode3d": "lines"},
+                        shader=undefined,
+                        name="gt",
+                        blend="default")];
+
+// viewer state
+
+var viewerState = new ViewerState(dimensions={"x": [1e-09, "m"], "y": [1e-09, "m"], "z": [1e-09, "m"]},
+                              position=[1500, 1500, 1250],
+                              crossSectionOrientation = [0.5, -0.5, 0.5, 0.5],
+                              crossSectionScale = 3.0, 
+                              projectionOrientation = [0, 0.7071067690849304, 0, 0.7071067690849304],
+                              projectionScale = 2000,
+                              layers = layers,
+                              selectedLayer={"layer": "raw", "size": 349, "layout": "4panel"});
+
+
+//$("#foo").attr("", neuroglancerAddress + encodeFragment(urlSafeStringify(viewerState)));
+$("#foo").attr("href", neuroglancerAddress + encodeFragment(urlSafeStringify(viewerState)));
+</script>
