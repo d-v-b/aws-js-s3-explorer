@@ -54,7 +54,116 @@
 
 </html>
 <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+<script src="https://sdk.amazonaws.com/js/aws-sdk-2.207.0.min.js"></script>
 <script type="text/javascript"> 
+
+var s3exp_config = {
+        Region: '',
+        Bucket: '',
+        Prefix: '',
+        Delimiter: '/'
+    };
+
+AWS.config.region = 'us-east-1';
+console.log('Region: ' + AWS.config.region);
+
+// Initialize S3 SDK and the moment library (for time formatting utilities)
+var s3 = new AWS.S3();
+
+function s3list(config, completecb) {
+        console.log('s3list config: ' + JSON.stringify(config));
+        var params = {
+            Bucket: config.Bucket,
+            Prefix: config.Prefix,
+            Delimiter: config.Delimiter
+        };
+        var scope = {
+            Contents: [],
+            CommonPrefixes: [],
+            params: params,
+            stop: false,
+            completecb: completecb
+        };
+
+        return {
+            // This is the callback that the S3 API makes when an S3 listObjectsV2
+            // request completes (successfully or in error). Note that a single call
+            // to listObjectsV2 may not be enough to get all objects so we need to
+            // check if the returned data is truncated and, if so, make additional
+            // requests with a 'next marker' until we have all the objects.
+            cb: function(err, data) {
+                if (err) {
+                    console.log('Error: ' + JSON.stringify(err));
+                    console.log('Error: ' + err.stack);
+                    scope.stop = true;
+                    //$('#bucket-loader').removeClass('fa-spin');
+                    //bootbox.alert("Error accessing S3 bucket " + scope.params.Bucket + ". Error: " + err);
+                } else {
+                    // console.log('Data: ' + JSON.stringify(data));
+                    console.log("Options: " + $("input[name='optionsdepth']:checked").val());
+
+                    // Store marker before filtering data
+                    if (data.IsTruncated) {
+                        if (data.NextContinuationToken) {
+                            scope.params.ContinuationToken = data.NextContinuationToken;
+                        }
+                    }
+
+                    // Filter the folders out of the listed S3 objects
+                    // (could probably be done more efficiently)
+                    console.log("Filter: remove folders");
+                    data.Contents = data.Contents.filter(function(el) {
+                        return el.Key !== scope.params.Prefix;
+                    });
+
+                    // Optionally, filter the root index.html out of the listed S3 objects
+                    if (HIDE_INDEX) {
+                        console.log("Filter: remove index.html");
+                        data.Contents = data.Contents.filter(function(el) {
+                            return el.Key !== "index.html";
+                        });
+                    }
+
+                    // Accumulate the S3 objects and common prefixes
+                    scope.Contents.push.apply(scope.Contents, data.Contents);
+                    scope.CommonPrefixes.push.apply(scope.CommonPrefixes, data.CommonPrefixes);
+
+                    if (scope.stop) {
+                        console.log('Bucket ' + scope.params.Bucket + ' stopped');
+                    } else if (data.IsTruncated) {
+                        console.log('Bucket ' + scope.params.Bucket + ' truncated');
+                        s3.makeUnauthenticatedRequest('listObjectsV2', scope.params, scope.cb);
+                    } else {
+                        console.log('Bucket ' + scope.params.Bucket + ' has ' + scope.Contents.length + ' objects, including ' + scope.CommonPrefixes.length + ' prefixes');
+                        delete scope.params.ContinuationToken;
+                        if (scope.completecb) {
+                            scope.completecb(scope, true);
+                        }
+                        // $('#bucket-loader').removeClass('fa-spin');
+                    }
+                }
+            },
+
+            // Start the spinner, clear the table, make an S3 listObjectsV2 request
+            go: function() {
+                scope.cb = this.cb;
+                $('#bucket-loader').addClass('fa-spin');
+                $('#tb-s3objects').DataTable().clear();
+                s3.makeUnauthenticatedRequest('listObjectsV2', scope.params, this.cb);
+            },
+
+            stop: function() {
+                scope.stop = true;
+                delete scope.params.ContinuationToken;
+                if (scope.completecb) {
+                    scope.completecb(scope, false);
+                }
+                $('#bucket-loader').removeClass('fa-spin');
+            }
+        };
+    }
+
+
 
 /**
  * @license
@@ -234,6 +343,7 @@ var viewerState = new ViewerState(dimensions={"x": [1e-09, "m"], "y": [1e-09, "m
                               selectedLayer={"layer": "raw", "size": 349, "layout": "4panel"});
 
 
-//$("#foo").attr("", neuroglancerAddress + encodeFragment(urlSafeStringify(viewerState)));
 $("#foo").attr("href", neuroglancerAddress + encodeFragment(urlSafeStringify(viewerState)));
+$("#foo").text(datasetName);
+
 </script>
