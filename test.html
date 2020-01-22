@@ -135,7 +135,7 @@
 
   AWS.config.region = "us-east-1";
   console.log("Region: " + AWS.config.region);
-
+  const neuroglancerAddress = "http://neuroglancer-demo.appspot.com/#!";
   const bucket = `janelia-cosem-dev`;
   const bucket2URL = bucket => `https://${bucket}.s3.amazonaws.com/`;
   const bucketURL = bucket2URL(bucket);
@@ -274,8 +274,7 @@
   };
 
   // take an array of dataset objects and generate the correct viewer state
-  const datasetObjectsToViewerState = datasetObjects => {
-    console.log(`The datasetObjects are ${JSON.stringify(datasetObjects)}`)
+  const datasetObjectsToViewerState = datasetObjects => {   
     const nanom = [1e-9, "m"];
     const outputDimensions = { x: nanom, y: nanom, z: nanom };
     const layers = [];
@@ -292,9 +291,9 @@
 
     for (let i = 0; i < datasetObjects.length; i++) {
       let obj = datasetObjects[i];
-      console.log(`obj is ${JSON.stringify(obj)}`)
-      let layerType = obj.dtype === "uint64" ? "segmentation" : "image";
-      let datasetname = obj.path.split(config.Delimiter)[-2];
+
+      let layerType = obj.dtype === "uint64" ? "segmentation" : "image";     
+      let datasetName = obj.path.split(config.Delimiter).slice(-2,-1).pop();
       let sourceURL = `n5://${bucketURL}/${datasetName}`;
       let skeletonRendering =
         layerType === "segmentation"
@@ -316,8 +315,8 @@
           [0, 1, 0, obj.origin[1]],
           [0, 0, 1, obj.origin[2]]
         ]),
-        (outputDimensions = outputDimensions),
-        (inputDimensions = {
+        (oD = outputDimensions),
+        (iD = {
           x: [1e-9 * obj.gridSpacing[0], "m"],
           y: [1e-9 * obj.gridSpacing[1], "m"],
           z: [1e-9 * obj.gridSpacing[2], "m"]
@@ -338,14 +337,14 @@
       transforms.push(transform);
     }
     const vState = new ViewerState(
-      (dimensions = outputDimensions),
-      (position = viewerPosition),
-      (crossSectionOrientation = crossSectionOrientation),
-      (crossSectionScale = crossSectionScale),
-      (projectionOrientation = projectionOrientation),
-      (projectionScale = projectionScale),
-      (layers = layers),
-      (selectedLayer = selectedLayer)
+      (outputDimensions),
+      (viewerPosition),
+      (crossSectionOrientation),
+      (crossSectionScale),
+      (projectionOrientation),
+      (projectionScale),
+      (layers),
+      (selectedLayer)
     );
 
     return vState;
@@ -373,8 +372,8 @@
       .map(attr => attr.then(getDatasetAttrs))
       .map(obj => obj.then(a => a.map(makeDatasetObject)));
 
-    Promise.all(datasets).then(a => a.map(datasetObjectsToViewerState));
-      
+    viewerStates = Promise.all(datasets).then(a => a.map(datasetObjectsToViewerState));
+    viewerStates.then(a => a.map(b => neuroglancerAddress + encodeFragment(urlSafeStringify(b)))).then(console.log)
   };
 
   (s3exp_lister = s3l(config, completecb)).go();
@@ -469,7 +468,7 @@
     });
   }
 
-  const neuroglancerAddress = "http://neuroglancer-demo.appspot.com/#!";
+  
 
   const makeNgUrl = () => {
     let datasetName = "test.n5";
