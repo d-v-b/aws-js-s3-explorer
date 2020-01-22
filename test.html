@@ -65,7 +65,9 @@
   </head>
 
   <body>
-    <a id="foo" href="">"sup"</a>
+    <ul id="ng_urls">      
+    </ul>
+    
   </body>
 </html>
 <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
@@ -125,14 +127,6 @@
     }
   }
 
-  class DimensionXYZ {
-    constructor(x, y, z) {
-      this.x = x;
-      this.y = y;
-      this.z = z;
-    }
-  }
-
   const neuroglancerAddress = "http://neuroglancer-demo.appspot.com/#!";
   const bucket = `janelia-cosem-dev`;
   const bucket2URL = bucket => `https://${bucket}.s3.amazonaws.com/`;
@@ -153,225 +147,6 @@
     Prefix: "",
     Delimiter: "/"
   };
-
-  const s3l = (config, completecb) => {
-    console.log(`s3list config: ${JSON.stringify(config)}`);
-    var params = {
-      Bucket: config.Bucket,
-      Prefix: config.Prefix,
-      Delimiter: config.Delimiter
-    };
-
-    var scope = {
-      Contents: [],
-      CommonPrefixes: [],
-      params: params,
-      stop: false,
-      completecb: completecb
-    };
-
-    return {
-      cb: function(err, data) {
-        //console.log("Inside the s3 request callback");
-        if (err) {
-          console.log("Error message:", err);
-          scope.stop = true;
-        } else {
-          //console.log("Data: " + JSON.stringify(data));
-          if (data.IsTruncated) {
-            if (data.NextContinuationToken) {
-              scope.params.ContinuationToken = data.NextContinuationToken;
-            }
-          }
-
-          // Accumulate the S3 objects and common prefixes
-          scope.Contents.push.apply(scope.Contents, data.Contents);
-          scope.CommonPrefixes.push.apply(
-            scope.CommonPrefixes,
-            data.CommonPrefixes
-          );
-
-          if (data.IsTruncated) {
-            s3.makeUnauthenticatedRequest(
-              "listObjectsV2",
-              scope.params,
-              scope.cb
-            );
-          } else {
-            delete scope.params.ContinuationToken;
-            if (scope.completecb) {
-              scope.completecb(scope, true);
-            }
-          }
-        }
-      },
-      go: function() {
-        scope.cb = this.cb;
-        //console.log("Talking to s3");
-        s3.makeUnauthenticatedRequest("listObjectsV2", scope.params, this.cb);
-      },
-
-      stop: function() {
-        //console.log("Inside stop");
-        scope.stop = true;
-        delete scope.params.ContinuationToken;
-        if (scope.completecb) {
-          scope.completecb(scope, false);
-        }
-      }
-    };
-  };
-
-  const getObjectFromJSON = url => {
-    return fetch(url)
-      .then(response => {
-        return response.json();
-      })
-      .catch(error => console.log(`Failed because: ${error}`));
-  };
-
-  const parseDatasetAttrs = n5attrs =>
-    new Dataset(
-      (path = n5attrs.path),
-      (dtype = n5attrs.dataType),
-      (dimensions = n5attrs.dimensions),
-      (name = n5attrs.name),
-      (origin = n5attrs.offset),
-      (gridSpacing = n5attrs.pixelResolution["dimensions"]),
-      (unit = n5attrs.pixelResolution["unit"])
-    );
-
-  const getDatasetAttrs = async rootAttrs => {
-    let sep = config.Delimiter;
-    let rAttrs = await rootAttrs;
-    let rootPath = rAttrs.root;
-    let datasetNames = rAttrs[targetDatasetsKey];
-
-    datasets = datasetNames.map(async name => {
-      let path = `${rootPath}${name}${sep}`;
-      // get the attributes of the individual datasets
-      let attr = await getObjectFromJSON(
-        `${path}${baseResolutionName}${sep}attributes.json`
-      );      
-      // add the full path as a property
-      attr.path = path;
-      dsetObject = parseDatasetAttrs(attr)
-      return Promise.resolve(dsetObject);
-    });
-    return Promise.all(datasets)
-  };
-
-  const getViewerPosition = (dimensions, origins) => {
-    // get the largest volume, then return the middle coordinate of that volume shifted by the origin
-    let position = [];
-    volumes = dimensions.map(d => d.reduce((a, b) => a * b));
-    max_volume = Math.max.apply(null, volumes);
-    index = volumes.indexOf(max_volume);
-    position = origins[index].map(
-      (val, idx) => val + dimensions[index][idx] / 2
-    );
-    return position;
-  };
-
-  // take an array of dataset objects and generate the correct viewer state
-  const datasetObjectsToViewerState = datasetObjects => {
-    console.log(datasetObjects)
-    const nanom = [1e-9, "m"];
-    const outputDimensions = { x: nanom, y: nanom, z: nanom };
-    const layers = [];
-    const transforms = [];
-    const viewerPosition = getViewerPosition(
-      datasetObjects.map(a => a.dimensions),
-      datasetObjects.map(a => a.origin)
-    );
-    const projectionOrientation = undefined;
-    const crossSectionOrientation = undefined;
-    const projectionScale = undefined;
-    const crossSectionScale = 3.0;
-    const selectedLayer = undefined;
-
-    for (let i = 0; i < datasetObjects.length; i++) {
-      let obj = datasetObjects[i];
-
-      let layerType = obj.dtype === "uint64" ? "segmentation" : "image";
-      let sourceURL = `n5://${obj.path}`;
-      let skeletonRendering =
-        layerType === "segmentation"
-          ? { mode2d: "lines_and_points", mode3d: "lines" }
-          : undefined;
-      let shader =
-        layerType === "image"
-          ? "void main() {\\n  emitGrayscale(pow(toNormalized(getDataValue()), 6.0));\\n}\\n"
-          : undefined;
-
-      let viewerPosition = getViewerPosition(
-        datasetObjects.map(a => a.dimensions),
-        datasetObjects.map(a => a.origin)
-      );
-
-      let transform = new Transform(
-        (matrix = [
-          [1, 0, 0, obj.origin[0]],
-          [0, 1, 0, obj.origin[1]],
-          [0, 0, 1, obj.origin[2]]
-        ]),
-        (oD = outputDimensions),
-        (iD = {
-          x: [1e-9 * obj.gridSpacing[0], "m"],
-          y: [1e-9 * obj.gridSpacing[1], "m"],
-          z: [1e-9 * obj.gridSpacing[2], "m"]
-        })
-      );
-
-      let layer = new Layer(
-        (type = layerType),
-        (source = { url: sourceURL, transform: transform }),
-        (tab = "source"),
-        (skeletonRendering = skeletonRendering),
-        (shader = shader),
-        (name = obj.name),
-        (blend = "default")
-      );
-
-      layers.push(layer);
-      transforms.push(transform);
-    }
-    const vState = new ViewerState(
-      outputDimensions,
-      viewerPosition,
-      crossSectionOrientation,
-      crossSectionScale,
-      projectionOrientation,
-      projectionScale,
-      layers,
-      selectedLayer
-    );
-
-    return vState;
-  };
-
-  const completecb = async (data, complete) => {
-
-    let bucketURL = bucket2URL(data.params.Bucket);
-    let n5Containers = data.CommonPrefixes.map(
-      arg => arg.Prefix).filter(isN5Container);
-    // array of promises
-    let rootAttrs = n5Containers.map(async container => {
-      let containerPath = `${bucketURL}${container}`;
-      let rootAttrs = await getObjectFromJSON(
-        containerPath + `attributes.json`
-      );
-      rootAttrs.root = containerPath;
-      return rootAttrs;
-    });
-
-    let datasets =  await Promise.all(rootAttrs.map(getDatasetAttrs));   
-    let viewerStates = datasets.map(datasetObjectsToViewerState);
-    let urls = viewerStates.map(state =>neuroglancerAddress + encodeFragment(urlSafeStringify(state)));
-    console.log(urls);
-  };
-
-  (s3exp_lister = s3l(config, completecb)).go();
 
   /**
    * @license
@@ -463,79 +238,224 @@
     });
   }
 
-  const makeNgUrl = () => {
-    let datasetName = "test.n5";
-    let sourceURLs = {
-      raw: `n5://${bucketURL}${datasetName}/raw`,
-      gt: `n5://${bucketURL}${datasetName}/gt`
+  const s3l = (config, completecb) => {
+    var params = {
+      Bucket: config.Bucket,
+      Prefix: config.Prefix,
+      Delimiter: config.Delimiter
     };
 
-    let grayscaleShader =
-      "void main() {\\n  emitGrayscale(pow(toNormalized(getDataValue()), 6.0));\\n}\\n";
-
-    let transforms = {
-      raw: new Transform(
-        (matrix = [
-          [1, 0, 0, 1000],
-          [0, 1, 0, 1000],
-          [0, 0, 1, 1000]
-        ]),
-        (outputDimensions = { x: [1e-9, "m"], y: [1e-9, "m"], z: [1e-9, "m"] }),
-        (inputDimensions = { x: [4e-9, "m"], y: [4e-9, "m"], z: [4e-9, "m"] })
-      ),
-      gt: new Transform(
-        (matrix = [
-          [1, 0, 0, 1100],
-          [0, 1, 0, 1100],
-          [0, 0, 1, 1100]
-        ]),
-        (outputDimensions = { x: [1e-9, "m"], y: [1e-9, "m"], z: [1e-9, "m"] }),
-        (inputDimensions = { x: [2e-9, "m"], y: [2e-9, "m"], z: [2e-9, "m"] })
-      )
+    var scope = {
+      Contents: [],
+      CommonPrefixes: [],
+      params: params,
+      stop: false,
+      completecb: completecb
     };
 
-    let layers = [
-      new Layer(
-        (type = "image"),
-        (source = { url: sourceURLs.raw, transform: transforms.raw }),
-        (tab = "source"),
-        (skeletonRendering = undefined),
-        (shader = grayscaleShader),
-        (name = "raw"),
-        (blend = "default")
-      ),
-      new Layer(
-        (type = "segmentation"),
-        (source = { url: sourceURLs.gt, transform: transforms.gt }),
-        (tab = "source"),
-        (skeletonRendering = { mode2d: "lines_and_points", mode3d: "lines" }),
-        (shader = undefined),
-        (name = "gt"),
-        (blend = "default")
-      )
-    ];
+    return {
+      cb: function(err, data) {
+        if (err) {
+          console.log("Error message:", err);
+          scope.stop = true;
+        } else {
+          if (data.IsTruncated) {
+            if (data.NextContinuationToken) {
+              scope.params.ContinuationToken = data.NextContinuationToken;
+            }
+          }
 
-    // viewer state
+          // Accumulate the S3 objects and common prefixes
+          scope.Contents.push.apply(scope.Contents, data.Contents);
+          scope.CommonPrefixes.push.apply(
+            scope.CommonPrefixes,
+            data.CommonPrefixes
+          );
 
-    let viewerState = new ViewerState(
-      (dimensions = { x: [1e-9, "m"], y: [1e-9, "m"], z: [1e-9, "m"] }),
-      (position = [1500, 1500, 1250]),
-      (crossSectionOrientation = undefined),
-      (crossSectionScale = 3.0),
-      (projectionOrientation = undefined),
-      (projectionScale = undefined),
-      (layers = layers),
-      (selectedLayer = undefined)
+          if (data.IsTruncated) {
+            s3.makeUnauthenticatedRequest(
+              "listObjectsV2",
+              scope.params,
+              scope.cb
+            );
+          } else {
+            delete scope.params.ContinuationToken;
+            if (scope.completecb) {
+              scope.completecb(scope, true);
+            }
+          }
+        }
+      },
+      go: function() {
+        scope.cb = this.cb;
+        s3.makeUnauthenticatedRequest("listObjectsV2", scope.params, this.cb);
+      },
+
+      stop: function() {
+        scope.stop = true;
+        delete scope.params.ContinuationToken;
+        if (scope.completecb) {
+          scope.completecb(scope, false);
+        }
+      }
+    };
+  };
+
+  const getObjectFromJSON = url => {
+    return fetch(url)
+      .then(response => {
+        return response.json();
+      })
+      .catch(error => console.log(`Failed because: ${error}`));
+  };
+
+  const parseDatasetAttrs = n5attrs =>
+    new Dataset(
+      (path = n5attrs.path),
+      (dtype = n5attrs.dataType),
+      (dimensions = n5attrs.dimensions),
+      (name = n5attrs.name),
+      (origin = n5attrs.offset),
+      (gridSpacing = n5attrs.pixelResolution["dimensions"]),
+      (unit = n5attrs.pixelResolution["unit"])
     );
 
-    $("#foo").attr(
-      "href",
-      neuroglancerAddress + encodeFragment(urlSafeStringify(viewerState))
+  const getDatasetAttrs = async rootAttrs => {
+    let sep = config.Delimiter;
+    let rAttrs = await rootAttrs;
+    let rootPath = rAttrs.root;
+    let datasetNames = rAttrs[targetDatasetsKey];
+
+    datasets = datasetNames.map(async name => {
+      let path = `${rootPath}${name}${sep}`;
+      // get the attributes of the individual datasets
+      let attr = await getObjectFromJSON(
+        `${path}${baseResolutionName}${sep}attributes.json`
+      );
+      // add the full path as a property
+      attr.path = path;
+      dsetObject = parseDatasetAttrs(attr);
+      return Promise.resolve(dsetObject);
+    });
+    return Promise.all(datasets);
+  };
+
+  const getViewerPosition = (dimensions, origins) => {
+    // get the largest volume, then return the middle coordinate of that volume shifted by the origin
+    let position = [];
+    volumes = dimensions.map(d => d.reduce((a, b) => a * b));
+    max_volume = Math.max.apply(null, volumes);
+    index = volumes.indexOf(max_volume);
+    position = origins[index].map(
+      (val, idx) => val + dimensions[index][idx] / 2
     );
-    $("#foo").text(datasetName);
+    return position;
+  };
+
+  // take an array of dataset objects and generate the correct viewer state
+  const datasetObjectsToViewerState = datasetObjects => {
+    const nanom = [1e-9, "m"];
+    const outputDimensions = { x: nanom, y: nanom, z: nanom };
+    const layers = [];
+    const transforms = [];
+    const viewerPosition = getViewerPosition(
+      datasetObjects.map(a => a.dimensions),
+      datasetObjects.map(a => a.origin)
+    );
+    const projectionOrientation = undefined;
+    const crossSectionOrientation = undefined;
+    const projectionScale = undefined;
+    const crossSectionScale = 3.0;
+    const selectedLayer = undefined;
+
+    for (let i = 0; i < datasetObjects.length; i++) {
+      let obj = datasetObjects[i];
+
+      let layerType = obj.dtype === "uint64" ? "segmentation" : "image";
+      let sourceURL = `n5://${obj.path}`;
+      let skeletonRendering =
+        layerType === "segmentation"
+          ? { mode2d: "lines_and_points", mode3d: "lines" }
+          : undefined;
+      let shader =
+        layerType === "image"
+          ? "void main() {\\n  emitGrayscale(pow(toNormalized(getDataValue()), 6.0));\\n}\\n"
+          : undefined;
+
+      let viewerPosition = getViewerPosition(
+        datasetObjects.map(a => a.dimensions),
+        datasetObjects.map(a => a.origin)
+      );
+
+      let transform = new Transform(
+        (matrix = [
+          [1, 0, 0, obj.origin[0]],
+          [0, 1, 0, obj.origin[1]],
+          [0, 0, 1, obj.origin[2]]
+        ]),
+        (oD = outputDimensions),
+        (iD = {
+          x: [1e-9 * obj.gridSpacing[0], "m"],
+          y: [1e-9 * obj.gridSpacing[1], "m"],
+          z: [1e-9 * obj.gridSpacing[2], "m"]
+        })
+      );
+
+      let layer = new Layer(
+        (type = layerType),
+        (source = { url: sourceURL, transform: transform }),
+        (tab = "source"),
+        (skeletonRendering = skeletonRendering),
+        (shader = shader),
+        (name = obj.name),
+        (blend = "default")
+      );
+
+      layers.push(layer);
+      transforms.push(transform);
+    }
+    const vState = new ViewerState(
+      outputDimensions,
+      viewerPosition,
+      crossSectionOrientation,
+      crossSectionScale,
+      projectionOrientation,
+      projectionScale,
+      layers,
+      selectedLayer
+    );
+
+    return vState;
+  };
+
+  const completecb = async (data, complete) => {
+    let bucketURL = bucket2URL(data.params.Bucket);
+    let n5Containers = data.CommonPrefixes.map(arg => arg.Prefix).filter(
+      isN5Container
+    );
+    // for each n5 container, get the root attributes
+    let rootAttrs = n5Containers.map(async container => {
+      let containerPath = `${bucketURL}${container}`;
+      let rootAttrs = await getObjectFromJSON(
+        containerPath + `attributes.json`
+      );
+      rootAttrs.root = containerPath;
+      return rootAttrs;
+    });
+    // for each dataset described in the root attributes, instantiate an object for the metadata of that dataset
+    let datasets = await Promise.all(rootAttrs.map(getDatasetAttrs));
+    // turn the dataset objects into a viewer state
+    let viewerStates = datasets.map(datasetObjectsToViewerState);
+    let urls = viewerStates.map(
+      state => neuroglancerAddress + encodeFragment(urlSafeStringify(state))
+    );
+    // update the dom
+    for (let idx = 0; idx < urls.length; idx ++) {
+      $("#ng_urls").append(`<li> <a href=${urls[idx]}>${n5Containers[idx]}</a></li>`);
+    }
   };
 
   $(document).ready(() => {
-    makeNgUrl();
+    (s3exp_lister = s3l(config, completecb)).go();
   });
 </script>
