@@ -1,349 +1,549 @@
 <html lang="en">
-    <head>
-        <title>AWS S3 Explorer</title>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <link rel="shortcut icon" href="https://aws.amazon.com/favicon.ico">
-        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap.min.css" integrity="sha384-PmY9l28YgO4JwMKbTvgaS7XNZJ30MK9FAZjjzXtlqyZCqBY6X6bXIkM++IkyinN+" crossorigin="anonymous">
-        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap-theme.min.css" integrity="sha384-jzngWsPS6op3fgRCDTESqrEJwRKck+CILhJVO5VvaAZCq8JYf8HsR/HPpBOOPZfR" crossorigin="anonymous">
-        <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.9.0/css/all.css">
-        <link rel="stylesheet" href="https://cdn.datatables.net/1.10.19/css/dataTables.bootstrap.min.css">
-        <style type="text/css">
-            #wrapper {
-                padding-left: 0;
-            }
-    
-            #page-wrapper {
-                width: 100%;
-                padding: 5px 15px;
-            }
-    
-            #tb-s3objects {
-                width: 100% !Important;
-            }
-    
-            a {
-                color: #00B7FF;
-            }
-    
-            body {
-                font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
-            }
-    
-            td {
-                font: 12px "Lucida Grande", Helvetica, Arial, sans-serif;
-            }
-    
-            .title {
-                padding: 6px 12px;
-            }
-    
-            .breadcrumb {
-                margin-bottom: 0;
-            }
-    
-            #navbuttons .btn {
-                padding: 3px 6px;
-            }
-        </style>
-    </head>
+  <head>
+    <title>AWS S3 Explorer</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="shortcut icon" href="https://aws.amazon.com/favicon.ico" />
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap.min.css"
+      integrity="sha384-PmY9l28YgO4JwMKbTvgaS7XNZJ30MK9FAZjjzXtlqyZCqBY6X6bXIkM++IkyinN+"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="stylesheet"
+      href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap-theme.min.css"
+      integrity="sha384-jzngWsPS6op3fgRCDTESqrEJwRKck+CILhJVO5VvaAZCq8JYf8HsR/HPpBOOPZfR"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="stylesheet"
+      href="https://use.fontawesome.com/releases/v5.9.0/css/all.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdn.datatables.net/1.10.19/css/dataTables.bootstrap.min.css"
+    />
+    <style type="text/css">
+      #wrapper {
+        padding-left: 0;
+      }
 
-    <body>
-        <a id="foo" href="">"sup"</a>
-    </body>
+      #page-wrapper {
+        width: 100%;
+        padding: 5px 15px;
+      }
 
+      #tb-s3objects {
+        width: 100% !Important;
+      }
+
+      a {
+        color: #00b7ff;
+      }
+
+      body {
+        font: 14px "Lucida Grande", Helvetica, Arial, sans-serif;
+      }
+
+      td {
+        font: 12px "Lucida Grande", Helvetica, Arial, sans-serif;
+      }
+
+      .title {
+        padding: 6px 12px;
+      }
+
+      .breadcrumb {
+        margin-bottom: 0;
+      }
+
+      #navbuttons .btn {
+        padding: 3px 6px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <a id="foo" href="">"sup"</a>
+  </body>
 </html>
 <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
 <script src="https://sdk.amazonaws.com/js/aws-sdk-2.207.0.min.js"></script>
-<script type="text/javascript"> 
+<script type="text/javascript">
+  class Dataset {
+    constructor(path, dtype, dimensions, name, offset, gridSpacing, unit) {
+      this.path = path;
+      this.dtype = dtype;
+      this.dimensions = dimensions;
+      this.name = name;
+      this.origin = offset;
+      this.gridSpacing = gridSpacing;
+      this.unit = unit;
+    }
+  }
 
-var s3exp_config = {
-        Region: '',
-        Bucket: '',
-        Prefix: '',
-        Delimiter: '/'
+  class ViewerState {
+    constructor(
+      dimensions,
+      position,
+      crossSectionOrientation,
+      crossSectionScale,
+      projectionOrientation,
+      projectionScale,
+      layers,
+      selectedLayer
+    ) {
+      this.dimensions = dimensions;
+      this.position = position;
+      this.crossSectionOrientation = crossSectionOrientation;
+      this.crossSectionScale = crossSectionScale;
+      this.projectionScale = projectionOrientation;
+      this.projectionScale = projectionScale;
+      this.layers = layers;
+      this.selectedLayer = selectedLayer;
+    }
+  }
+
+  class Transform {
+    constructor(matrix, outputDimensions, inputDimensions) {
+      this.matrix = matrix;
+      this.outputDimensions = outputDimensions;
+      this.inputDimensions = inputDimensions;
+    }
+  }
+
+  class Layer {
+    constructor(type, source, tab, skeletonRendering, shader, name, blend) {
+      this.type = type;
+      this.source = source;
+      this.tab = tab;
+      this.skeletonRendering = skeletonRendering;
+      this.shader = shader;
+      this.name = name;
+      this.blend = blend;
+    }
+  }
+
+  class DimensionXYZ {
+    constructor(x, y, z) {
+      this.x = x;
+      this.y = y;
+      this.z = z;
+    }
+  }
+
+  AWS.config.region = "us-east-1";
+  console.log("Region: " + AWS.config.region);
+
+  const bucket = `janelia-cosem-dev`;
+  const bucket2URL = bucket => `https://${bucket}.s3.amazonaws.com/`;
+  const bucketURL = bucket2URL(bucket);
+  // Initialize S3 SDK
+  const s3 = new AWS.S3();
+
+  const config = {
+    Bucket: bucket,
+    Prefix: "",
+    Delimiter: "/"
+  };
+
+  const s3l = (config, completecb) => {
+    console.log(`s3list config: ${JSON.stringify(config)}`);
+    var params = {
+      Bucket: config.Bucket,
+      Prefix: config.Prefix,
+      Delimiter: config.Delimiter
     };
 
-AWS.config.region = 'us-east-1';
-console.log('Region: ' + AWS.config.region);
+    var scope = {
+      Contents: [],
+      CommonPrefixes: [],
+      params: params,
+      stop: false,
+      completecb: completecb
+    };
 
-// Initialize S3 SDK and the moment library (for time formatting utilities)
-var s3 = new AWS.S3();
-
-function s3list(config, completecb) {
-        console.log('s3list config: ' + JSON.stringify(config));
-        var params = {
-            Bucket: config.Bucket,
-            Prefix: config.Prefix,
-            Delimiter: config.Delimiter
-        };
-        var scope = {
-            Contents: [],
-            CommonPrefixes: [],
-            params: params,
-            stop: false,
-            completecb: completecb
-        };
-
-        return {
-            // This is the callback that the S3 API makes when an S3 listObjectsV2
-            // request completes (successfully or in error). Note that a single call
-            // to listObjectsV2 may not be enough to get all objects so we need to
-            // check if the returned data is truncated and, if so, make additional
-            // requests with a 'next marker' until we have all the objects.
-            cb: function(err, data) {
-                if (err) {
-                    console.log('Error: ' + JSON.stringify(err));
-                    console.log('Error: ' + err.stack);
-                    scope.stop = true;
-                    //$('#bucket-loader').removeClass('fa-spin');
-                    //bootbox.alert("Error accessing S3 bucket " + scope.params.Bucket + ". Error: " + err);
-                } else {
-                    // console.log('Data: ' + JSON.stringify(data));
-                    console.log("Options: " + $("input[name='optionsdepth']:checked").val());
-
-                    // Store marker before filtering data
-                    if (data.IsTruncated) {
-                        if (data.NextContinuationToken) {
-                            scope.params.ContinuationToken = data.NextContinuationToken;
-                        }
-                    }
-
-                    // Filter the folders out of the listed S3 objects
-                    // (could probably be done more efficiently)
-                    console.log("Filter: remove folders");
-                    data.Contents = data.Contents.filter(function(el) {
-                        return el.Key !== scope.params.Prefix;
-                    });
-
-                    // Optionally, filter the root index.html out of the listed S3 objects
-                    if (HIDE_INDEX) {
-                        console.log("Filter: remove index.html");
-                        data.Contents = data.Contents.filter(function(el) {
-                            return el.Key !== "index.html";
-                        });
-                    }
-
-                    // Accumulate the S3 objects and common prefixes
-                    scope.Contents.push.apply(scope.Contents, data.Contents);
-                    scope.CommonPrefixes.push.apply(scope.CommonPrefixes, data.CommonPrefixes);
-
-                    if (scope.stop) {
-                        console.log('Bucket ' + scope.params.Bucket + ' stopped');
-                    } else if (data.IsTruncated) {
-                        console.log('Bucket ' + scope.params.Bucket + ' truncated');
-                        s3.makeUnauthenticatedRequest('listObjectsV2', scope.params, scope.cb);
-                    } else {
-                        console.log('Bucket ' + scope.params.Bucket + ' has ' + scope.Contents.length + ' objects, including ' + scope.CommonPrefixes.length + ' prefixes');
-                        delete scope.params.ContinuationToken;
-                        if (scope.completecb) {
-                            scope.completecb(scope, true);
-                        }
-                        // $('#bucket-loader').removeClass('fa-spin');
-                    }
-                }
-            },
-
-            // Start the spinner, clear the table, make an S3 listObjectsV2 request
-            go: function() {
-                scope.cb = this.cb;
-                $('#bucket-loader').addClass('fa-spin');
-                $('#tb-s3objects').DataTable().clear();
-                s3.makeUnauthenticatedRequest('listObjectsV2', scope.params, this.cb);
-            },
-
-            stop: function() {
-                scope.stop = true;
-                delete scope.params.ContinuationToken;
-                if (scope.completecb) {
-                    scope.completecb(scope, false);
-                }
-                $('#bucket-loader').removeClass('fa-spin');
+    return {
+      cb: function(err, data) {
+        //console.log("Inside the s3 request callback");
+        if (err) {
+          console.log("Error message:", err);
+          scope.stop = true;
+        } else {
+          //console.log("Data: " + JSON.stringify(data));
+          if (data.IsTruncated) {
+            if (data.NextContinuationToken) {
+              scope.params.ContinuationToken = data.NextContinuationToken;
             }
-        };
+          }
+
+          // Accumulate the S3 objects and common prefixes
+          scope.Contents.push.apply(scope.Contents, data.Contents);
+          scope.CommonPrefixes.push.apply(
+            scope.CommonPrefixes,
+            data.CommonPrefixes
+          );
+
+          if (data.IsTruncated) {
+            s3.makeUnauthenticatedRequest(
+              "listObjectsV2",
+              scope.params,
+              scope.cb
+            );
+          } else {
+            delete scope.params.ContinuationToken;
+            if (scope.completecb) {
+              scope.completecb(scope, true);
+            }
+          }
+        }
+      },
+      go: function() {
+        scope.cb = this.cb;
+        //console.log("Talking to s3");
+        s3.makeUnauthenticatedRequest("listObjectsV2", scope.params, this.cb);
+      },
+
+      stop: function() {
+        //console.log("Inside stop");
+        scope.stop = true;
+        delete scope.params.ContinuationToken;
+        if (scope.completecb) {
+          scope.completecb(scope, false);
+        }
+      }
+    };
+  };
+
+  const getObjectFromJSON = async url => {
+    const response = await fetch(url)
+      .then(response => {
+        return response.json();
+      })
+      .catch(error => console.log(`Failed because: ${error}`));
+    return response;
+  };
+
+  const isN5Container = arg => arg.split(".").pop() === "n5/";
+
+  const targetDatasetsKey = "multiscale_data";
+  const baseResolutionName = `s0`;
+
+  const getDatasetAttrs = async rootAttrs => {
+    let sep = config.Delimiter;
+    let rootPath = rootAttrs.root;
+    let datasetNames = rootAttrs[targetDatasetsKey];
+
+    // map a dataset name to a full path to the dataset
+    datasetPaths = datasetNames.map(
+      name => `${rootPath}${name}${sep}${baseResolutionName}${sep}`
+    );
+    // map dataset paths to the JSON object at that path
+    // append the path to the
+    attrs = datasetPaths.map((path, index) =>
+      getObjectFromJSON(path + `attributes.json`).then(attr => {
+        attr.path = `${rootPath}${datasetNames[index]}${sep}`;
+        return Promise.resolve(attr);
+      })
+    );
+    return Promise.all(attrs);
+  };
+
+  const makeDatasetObject = n5attrs =>
+    new Dataset(
+      (path = n5attrs.path),
+      (dtype = n5attrs.dataType),
+      (dimensions = n5attrs.dimensions),
+      (name = n5attrs.name),
+      (origin = n5attrs.offset),
+      (gridSpacing = n5attrs.pixelResolution["dimensions"]),
+      (unit = n5attrs.pixelResolution["unit"])
+    );
+
+  const getViewerPosition = (dimensions, origins) => {
+    // get the largest volume, then return the middle coordinate of that volume shifted by the origin
+    let position = [];
+    volumes = dimensions.map(d => d.reduce((a, b) => a * b));
+    max_volume = Math.max.apply(null, volumes);
+    index = volumes.indexOf(max_volume)
+    position = origins[index].map(
+          (val, idx) => val + dimensions[index][idx] / 2
+        );  
+    return position;
+  };
+
+  // take an array of dataset objects and generate the correct viewer state
+  const datasetObjectsToViewerState = datasetObjects => {
+    console.log(`The datasetObjects are ${JSON.stringify(datasetObjects)}`)
+    const nanom = [1e-9, "m"];
+    const outputDimensions = { x: nanom, y: nanom, z: nanom };
+    const layers = [];
+    const transforms = [];
+    const viewerPosition = getViewerPosition(
+      datasetObjects.map(a => a.dimensions),
+      datasetObjects.map(a => a.origin)
+    );
+    const projectionOrientation = undefined;
+    const crossSectionOrientation = undefined;
+    const projectionScale = undefined;
+    const crossSectionScale = 3.0;
+    const selectedLayer = undefined;
+
+    for (let i = 0; i < datasetObjects.length; i++) {
+      let obj = datasetObjects[i];
+      console.log(`obj is ${JSON.stringify(obj)}`)
+      let layerType = obj.dtype === "uint64" ? "segmentation" : "image";
+      let datasetname = obj.path.split(config.Delimiter)[-2];
+      let sourceURL = `n5://${bucketURL}/${datasetName}`;
+      let skeletonRendering =
+        layerType === "segmentation"
+          ? { mode2d: "lines_and_points", mode3d: "lines" }
+          : undefined;
+      let shader =
+        layerType === "image"
+          ? "void main() {\\n  emitGrayscale(pow(toNormalized(getDataValue()), 6.0));\\n}\\n"
+          : undefined;
+
+      let viewerPosition = getViewerPosition(
+        datasetObjects.map(a => a.dimensions),
+        datasetObjects.map(a => a.origin)
+      );
+
+      let transform = new Transform(
+        (matrix = [
+          [1, 0, 0, obj.origin[0]],
+          [0, 1, 0, obj.origin[1]],
+          [0, 0, 1, obj.origin[2]]
+        ]),
+        (outputDimensions = outputDimensions),
+        (inputDimensions = {
+          x: [1e-9 * obj.gridSpacing[0], "m"],
+          y: [1e-9 * obj.gridSpacing[1], "m"],
+          z: [1e-9 * obj.gridSpacing[2], "m"]
+        })
+      );
+
+      let layer = new Layer(
+        (type = layerType),
+        (source = { url: sourceURL, transform: transform }),
+        (tab = "source"),
+        (skeletonRendering = skeletonRendering),
+        (shader = shader),
+        (name = obj.name),
+        (blend = "default")
+      );
+
+      layers.push(layer);
+      transforms.push(transform);
     }
+    const vState = new ViewerState(
+      (dimensions = outputDimensions),
+      (position = viewerPosition),
+      (crossSectionOrientation = crossSectionOrientation),
+      (crossSectionScale = crossSectionScale),
+      (projectionOrientation = projectionOrientation),
+      (projectionScale = projectionScale),
+      (layers = layers),
+      (selectedLayer = selectedLayer)
+    );
 
+    return vState;
+  };
 
+  const completecb = (data, complete) => {
+    console.log(
+      `Finding the n5 containers in ${JSON.stringify(data.CommonPrefixes)}`
+    );
 
-/**
- * @license
- * Copyright 2016 Google Inc.
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-
-function swapQuotes(x) {
-    return x.replace(/['"]/g, s => {
-        return (s === '"' ? '\'' : '"');
+    let bucketURL = bucket2URL(data.params.Bucket);
+    let n5Containers = data.CommonPrefixes.map(arg => arg.Prefix).filter(arg =>
+      isN5Container(arg)
+    );
+    // array of promises
+    let rootAttrs = n5Containers.map(container => {
+      let containerPath = `${bucketURL}${container}`;
+      return getObjectFromJSON(containerPath + `attributes.json`).then(obj => {
+        obj.root = containerPath;
+        return Promise.resolve(obj);
+      });
     });
-}
-function urlSafeStringifyString(x) {
+
+    datasets = rootAttrs
+      .map(attr => attr.then(getDatasetAttrs))
+      .map(obj => obj.then(a => a.map(makeDatasetObject)));
+
+    Promise.all(datasets).then(a => a.map(datasetObjectsToViewerState));
+      
+  };
+
+  (s3exp_lister = s3l(config, completecb)).go();
+
+  /**
+   * @license
+   * Copyright 2016 Google Inc.
+   * Licensed under the Apache License, Version 2.0 (the "License");
+   * you may not use this file except in compliance with the License.
+   * You may obtain a copy of the License at
+   *
+   *      http://www.apache.org/licenses/LICENSE-2.0
+   *
+   * Unless required by applicable law or agreed to in writing, software
+   * distributed under the License is distributed on an "AS IS" BASIS,
+   * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   * See the License for the specific language governing permissions and
+   * limitations under the License.
+   */
+
+  function swapQuotes(x) {
+    return x.replace(/['"]/g, s => {
+      return s === '"' ? "'" : '"';
+    });
+  }
+  function urlSafeStringifyString(x) {
     return swapQuotes(JSON.stringify(swapQuotes(x)));
-}
-const URL_SAFE_COMMA = '_';
-function urlSafeStringify(x) {
-    if (typeof x === 'object') {
-        if (x === null) {
-            return 'null';
+  }
+  const URL_SAFE_COMMA = "_";
+  function urlSafeStringify(x) {
+    if (typeof x === "object") {
+      if (x === null) {
+        return "null";
+      }
+      let toJSON = x["toJSON"];
+      if (typeof toJSON === "function") {
+        return urlSafeStringify(toJSON.call(x));
+      }
+      if (Array.isArray(x)) {
+        let s = "[";
+        let size = x.length;
+        let i = 0;
+        if (i < size) {
+          s += urlSafeStringify(x[i]);
+          while (++i < size) {
+            s += URL_SAFE_COMMA;
+            s += urlSafeStringify(x[i]);
+          }
         }
-        let toJSON = x['toJSON'];
-        if (typeof toJSON === 'function') {
-            return urlSafeStringify(toJSON.call(x));
-        }
-        if (Array.isArray(x)) {
-            let s = '[';
-            let size = x.length;
-            let i = 0;
-            if (i < size) {
-                s += urlSafeStringify(x[i]);
-                while (++i < size) {
-                    s += URL_SAFE_COMMA;
-                    s += urlSafeStringify(x[i]);
-                }
-            }
-            s += ']';
-            return s;
-        }
-        let s = '{';
-        let keys = Object.keys(x);
-        let first = true;
-        for (let key of keys) {
-            let value = x[key];
-            if (value === undefined) {
-                continue;
-            }
-            let valueString = urlSafeStringify(value);
-            if (!valueString) {
-                continue;
-            }
-            if (!first) {
-                s += URL_SAFE_COMMA;
-            }
-            else {
-                first = false;
-            }
-            s += urlSafeStringifyString(key);
-            s += ':';
-            s += valueString;
-        }
-        s += '}';
+        s += "]";
         return s;
+      }
+      let s = "{";
+      let keys = Object.keys(x);
+      let first = true;
+      for (let key of keys) {
+        let value = x[key];
+        if (value === undefined) {
+          continue;
+        }
+        let valueString = urlSafeStringify(value);
+        if (!valueString) {
+          continue;
+        }
+        if (!first) {
+          s += URL_SAFE_COMMA;
+        } else {
+          first = false;
+        }
+        s += urlSafeStringifyString(key);
+        s += ":";
+        s += valueString;
+      }
+      s += "}";
+      return s;
     }
-    if (typeof x === 'string') {
-        return urlSafeStringifyString(x);
+    if (typeof x === "string") {
+      return urlSafeStringifyString(x);
     }
     return JSON.stringify(x);
-}
+  }
 
-function encodeFragment(fragment) {
-    return encodeURI(fragment).replace(/[!'()*;,]/g, function (c) {
-        return '%' + c.charCodeAt(0).toString(16).toUpperCase();
+  function encodeFragment(fragment) {
+    return encodeURI(fragment).replace(/[!'()*;,]/g, function(c) {
+      return (
+        "%" +
+        c
+          .charCodeAt(0)
+          .toString(16)
+          .toUpperCase()
+      );
     });
-}
+  }
 
-class ViewerState{
-    constructor(dimensions, position, crossSectionOrientation, crossSectionScale, projectionOrientation, projectionScale,layers, selectedLayer
-    )
-    {
-        this.dimensions = dimensions;
-        this.position = position;
-        this.crossSectionOrientation = crossSectionOrientation;
-        this.crossSectionScale = crossSectionScale;
-        this.projectionScale = projectionOrientation;
-        this.projectionScale = projectionScale;
-        this.layers = layers;
-        this.selectedLayer = selectedLayer;
-    }
-}
+  const neuroglancerAddress = "http://neuroglancer-demo.appspot.com/#!";
 
-class Transform {
-    constructor(matrix, outputDimensions, inputDimensions)
-    {
-        this.matrix = matrix;
-        this.outputDimensions = outputDimensions;
-        this.inputDimensions = inputDimensions;
-    }
-}
-
-class Layer {
-    constructor(type, source, tab, skeletonRendering, shader, name, blend)
-    {
-        this.type = type;
-        this.source = source;
-        this.tab = tab;
-        this.skeletonRendering = skeletonRendering;
-        this.shader = shader;
-        this.name = name;
-        this.blend = blend;
-    }
-}
-
-class DimensionXYZ {
-    constructor(x,y,z) 
-    {
-     this.x = x;
-     this.y = y;
-     this.z = z;
-    }
-}
-
-var neuroglancerAddress = "http://neuroglancer-demo.appspot.com/#!"
-var bucketURL = "https://janelia-cosem-dev.s3.amazonaws.com/"
-var datasetName = "test.n5"
-var sourceURLs = {
-    raw: "n5://" + bucketURL + datasetName + "/raw",
-    gt : "n5://" + bucketURL + datasetName + "/gt"
+  const makeNgUrl = () => {
+    let datasetName = "test.n5";
+    let sourceURLs = {
+      raw: `n5://${bucketURL}${datasetName}/raw`,
+      gt: `n5://${bucketURL}${datasetName}/gt`
     };
 
+    let grayscaleShader =
+      "void main() {\\n  emitGrayscale(pow(toNormalized(getDataValue()), 6.0));\\n}\\n";
 
-var grayscaleShader = "void main() {\\n  emitGrayscale(pow(toNormalized(getDataValue()), 6.0));\\n}\\n"
+    let transforms = {
+      raw: new Transform(
+        (matrix = [
+          [1, 0, 0, 1000],
+          [0, 1, 0, 1000],
+          [0, 0, 1, 1000]
+        ]),
+        (outputDimensions = { x: [1e-9, "m"], y: [1e-9, "m"], z: [1e-9, "m"] }),
+        (inputDimensions = { x: [4e-9, "m"], y: [4e-9, "m"], z: [4e-9, "m"] })
+      ),
+      gt: new Transform(
+        (matrix = [
+          [1, 0, 0, 1100],
+          [0, 1, 0, 1100],
+          [0, 0, 1, 1100]
+        ]),
+        (outputDimensions = { x: [1e-9, "m"], y: [1e-9, "m"], z: [1e-9, "m"] }),
+        (inputDimensions = { x: [2e-9, "m"], y: [2e-9, "m"], z: [2e-9, "m"] })
+      )
+    };
 
-var transforms = {"raw": new Transform(matrix=[[1, 0, 0, 1000], [0, 1, 0, 1000], [0, 0, 1, 1000]], 
-                  outputDimensions={"x": [1e-09, "m"], "y": [1e-09, "m"], "z": [1e-09, "m"]}, 
-                  inputDimensions={"x": [4e-09, "m"], "y": [4e-09, "m"], "z": [4e-09, "m"]}),
-                  "gt": new Transform(matrix=[[1, 0, 0, 1100], [0, 1, 0, 1100], [0, 0, 1, 1100]], 
-                  outputDimensions={"x": [1e-09, "m"], "y": [1e-09, "m"], "z": [1e-09, "m"]}, 
-                  inputDimensions={"x": [2e-09, "m"], "y": [2e-09, "m"], "z": [2e-09, "m"]})}
+    let layers = [
+      new Layer(
+        (type = "image"),
+        (source = { url: sourceURLs.raw, transform: transforms.raw }),
+        (tab = "source"),
+        (skeletonRendering = undefined),
+        (shader = grayscaleShader),
+        (name = "raw"),
+        (blend = "default")
+      ),
+      new Layer(
+        (type = "segmentation"),
+        (source = { url: sourceURLs.gt, transform: transforms.gt }),
+        (tab = "source"),
+        (skeletonRendering = { mode2d: "lines_and_points", mode3d: "lines" }),
+        (shader = undefined),
+        (name = "gt"),
+        (blend = "default")
+      )
+    ];
 
+    // viewer state
 
-var layers = [new Layer(type="image",
-                        source={"url": sourceURLs.raw, "transform": transforms.raw},
-                        tab="source",
-                        skeletonRendering=undefined,
-                        shader=grayscaleShader,
-                        name="raw",
-                        blend="default"),
-                        new Layer(type="segmentation",
-                        source={"url": sourceURLs.gt, "transform": transforms.gt},
-                        tab="source",                                                  
-                        skeletonRendering = {"mode2d": "lines_and_points", "mode3d": "lines"},
-                        shader=undefined,
-                        name="gt",
-                        blend="default")];
+    let viewerState = new ViewerState(
+      (dimensions = { x: [1e-9, "m"], y: [1e-9, "m"], z: [1e-9, "m"] }),
+      (position = [1500, 1500, 1250]),
+      (crossSectionOrientation = undefined),
+      (crossSectionScale = 3.0),
+      (projectionOrientation = undefined),
+      (projectionScale = undefined),
+      (layers = layers),
+      (selectedLayer = undefined)
+    );
 
-// viewer state
+    $("#foo").attr(
+      "href",
+      neuroglancerAddress + encodeFragment(urlSafeStringify(viewerState))
+    );
+    $("#foo").text(datasetName);
+  };
 
-var viewerState = new ViewerState(dimensions={"x": [1e-09, "m"], "y": [1e-09, "m"], "z": [1e-09, "m"]},
-                              position=[1500, 1500, 1250],
-                              crossSectionOrientation = [0.5, -0.5, 0.5, 0.5],
-                              crossSectionScale = 3.0, 
-                              projectionOrientation = [0, 0.7071067690849304, 0, 0.7071067690849304],
-                              projectionScale = 2000,
-                              layers = layers,
-                              selectedLayer={"layer": "raw", "size": 349, "layout": "4panel"});
-
-
-$("#foo").attr("href", neuroglancerAddress + encodeFragment(urlSafeStringify(viewerState)));
-$("#foo").text(datasetName);
-
+  $(document).ready(() => {
+    makeNgUrl();
+  });
 </script>
