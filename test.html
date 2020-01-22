@@ -133,12 +133,18 @@
     }
   }
 
-  AWS.config.region = "us-east-1";
-  console.log("Region: " + AWS.config.region);
   const neuroglancerAddress = "http://neuroglancer-demo.appspot.com/#!";
   const bucket = `janelia-cosem-dev`;
   const bucket2URL = bucket => `https://${bucket}.s3.amazonaws.com/`;
   const bucketURL = bucket2URL(bucket);
+
+  const isN5Container = arg => arg.split(".").pop() === "n5/";
+  const targetDatasetsKey = "multiscale_data";
+  const baseResolutionName = `s0`;
+
+  AWS.config.region = "us-east-1";
+  console.log("Region: " + AWS.config.region);
+
   // Initialize S3 SDK
   const s3 = new AWS.S3();
 
@@ -216,41 +222,15 @@
     };
   };
 
-  const getObjectFromJSON = async url => {
-    const response = await fetch(url)
+  const getObjectFromJSON = url => {
+    return fetch(url)
       .then(response => {
         return response.json();
       })
       .catch(error => console.log(`Failed because: ${error}`));
-    return response;
   };
 
-  const isN5Container = arg => arg.split(".").pop() === "n5/";
-
-  const targetDatasetsKey = "multiscale_data";
-  const baseResolutionName = `s0`;
-
-  const getDatasetAttrs = async rootAttrs => {
-    let sep = config.Delimiter;
-    let rootPath = rootAttrs.root;
-    let datasetNames = rootAttrs[targetDatasetsKey];
-
-    // map a dataset name to a full path to the dataset
-    datasetPaths = datasetNames.map(
-      name => `${rootPath}${name}${sep}${baseResolutionName}${sep}`
-    );
-    // map dataset paths to the JSON object at that path
-    // append the path to the
-    attrs = datasetPaths.map((path, index) =>
-      getObjectFromJSON(path + `attributes.json`).then(attr => {
-        attr.path = `${rootPath}${datasetNames[index]}${sep}`;
-        return Promise.resolve(attr);
-      })
-    );
-    return Promise.all(attrs);
-  };
-
-  const makeDatasetObject = n5attrs =>
+  const parseDatasetAttrs = n5attrs =>
     new Dataset(
       (path = n5attrs.path),
       (dtype = n5attrs.dataType),
@@ -261,20 +241,41 @@
       (unit = n5attrs.pixelResolution["unit"])
     );
 
+  const getDatasetAttrs = async rootAttrs => {
+    let sep = config.Delimiter;
+    let rAttrs = await rootAttrs;
+    let rootPath = rAttrs.root;
+    let datasetNames = rAttrs[targetDatasetsKey];
+
+    datasets = datasetNames.map(async name => {
+      let path = `${rootPath}${name}${sep}`;
+      // get the attributes of the individual datasets
+      let attr = await getObjectFromJSON(
+        `${path}${baseResolutionName}${sep}attributes.json`
+      );      
+      // add the full path as a property
+      attr.path = path;
+      dsetObject = parseDatasetAttrs(attr)
+      return Promise.resolve(dsetObject);
+    });
+    return Promise.all(datasets)
+  };
+
   const getViewerPosition = (dimensions, origins) => {
     // get the largest volume, then return the middle coordinate of that volume shifted by the origin
     let position = [];
     volumes = dimensions.map(d => d.reduce((a, b) => a * b));
     max_volume = Math.max.apply(null, volumes);
-    index = volumes.indexOf(max_volume)
+    index = volumes.indexOf(max_volume);
     position = origins[index].map(
-          (val, idx) => val + dimensions[index][idx] / 2
-        );  
+      (val, idx) => val + dimensions[index][idx] / 2
+    );
     return position;
   };
 
   // take an array of dataset objects and generate the correct viewer state
-  const datasetObjectsToViewerState = datasetObjects => {   
+  const datasetObjectsToViewerState = datasetObjects => {
+    console.log(datasetObjects)
     const nanom = [1e-9, "m"];
     const outputDimensions = { x: nanom, y: nanom, z: nanom };
     const layers = [];
@@ -292,9 +293,8 @@
     for (let i = 0; i < datasetObjects.length; i++) {
       let obj = datasetObjects[i];
 
-      let layerType = obj.dtype === "uint64" ? "segmentation" : "image";     
-      let datasetName = obj.path.split(config.Delimiter).slice(-2,-1).pop();
-      let sourceURL = `n5://${bucketURL}/${datasetName}`;
+      let layerType = obj.dtype === "uint64" ? "segmentation" : "image";
+      let sourceURL = `n5://${obj.path}`;
       let skeletonRendering =
         layerType === "segmentation"
           ? { mode2d: "lines_and_points", mode3d: "lines" }
@@ -337,43 +337,38 @@
       transforms.push(transform);
     }
     const vState = new ViewerState(
-      (outputDimensions),
-      (viewerPosition),
-      (crossSectionOrientation),
-      (crossSectionScale),
-      (projectionOrientation),
-      (projectionScale),
-      (layers),
-      (selectedLayer)
+      outputDimensions,
+      viewerPosition,
+      crossSectionOrientation,
+      crossSectionScale,
+      projectionOrientation,
+      projectionScale,
+      layers,
+      selectedLayer
     );
 
     return vState;
   };
 
-  const completecb = (data, complete) => {
-    console.log(
-      `Finding the n5 containers in ${JSON.stringify(data.CommonPrefixes)}`
-    );
+  const completecb = async (data, complete) => {
 
     let bucketURL = bucket2URL(data.params.Bucket);
-    let n5Containers = data.CommonPrefixes.map(arg => arg.Prefix).filter(arg =>
-      isN5Container(arg)
-    );
+    let n5Containers = data.CommonPrefixes.map(
+      arg => arg.Prefix).filter(isN5Container);
     // array of promises
-    let rootAttrs = n5Containers.map(container => {
+    let rootAttrs = n5Containers.map(async container => {
       let containerPath = `${bucketURL}${container}`;
-      return getObjectFromJSON(containerPath + `attributes.json`).then(obj => {
-        obj.root = containerPath;
-        return Promise.resolve(obj);
-      });
+      let rootAttrs = await getObjectFromJSON(
+        containerPath + `attributes.json`
+      );
+      rootAttrs.root = containerPath;
+      return rootAttrs;
     });
 
-    datasets = rootAttrs
-      .map(attr => attr.then(getDatasetAttrs))
-      .map(obj => obj.then(a => a.map(makeDatasetObject)));
-
-    viewerStates = Promise.all(datasets).then(a => a.map(datasetObjectsToViewerState));
-    viewerStates.then(a => a.map(b => neuroglancerAddress + encodeFragment(urlSafeStringify(b)))).then(console.log)
+    let datasets =  await Promise.all(rootAttrs.map(getDatasetAttrs));   
+    let viewerStates = datasets.map(datasetObjectsToViewerState);
+    let urls = viewerStates.map(state =>neuroglancerAddress + encodeFragment(urlSafeStringify(state)));
+    console.log(urls);
   };
 
   (s3exp_lister = s3l(config, completecb)).go();
@@ -467,8 +462,6 @@
       );
     });
   }
-
-  
 
   const makeNgUrl = () => {
     let datasetName = "test.n5";
