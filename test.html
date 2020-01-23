@@ -65,14 +65,13 @@
   </head>
 
   <body>
-    <ul id="ng_urls">      
-    </ul>
-    
+    <ul id="ng_urls"></ul>
   </body>
 </html>
 <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
 <script src="https://sdk.amazonaws.com/js/aws-sdk-2.207.0.min.js"></script>
 <script type="text/javascript">
+  "use strict";
   class Dataset {
     constructor(path, dtype, dimensions, name, offset, gridSpacing, unit) {
       this.path = path;
@@ -311,13 +310,13 @@
 
   const parseDatasetAttrs = n5attrs =>
     new Dataset(
-      (path = n5attrs.path),
-      (dtype = n5attrs.dataType),
-      (dimensions = n5attrs.dimensions),
-      (name = n5attrs.name),
-      (origin = n5attrs.offset),
-      (gridSpacing = n5attrs.pixelResolution["dimensions"]),
-      (unit = n5attrs.pixelResolution["unit"])
+      n5attrs.path,
+      n5attrs.dataType,
+      n5attrs.dimensions,
+      n5attrs.name,
+      n5attrs.offset,
+      n5attrs.pixelResolution["dimensions"],
+      n5attrs.pixelResolution["unit"]
     );
 
   const getDatasetAttrs = async rootAttrs => {
@@ -326,7 +325,7 @@
     let rootPath = rAttrs.root;
     let datasetNames = rAttrs[targetDatasetsKey];
 
-    datasets = datasetNames.map(async name => {
+    let datasets = datasetNames.map(async name => {
       let path = `${rootPath}${name}${sep}`;
       // get the attributes of the individual datasets
       let attr = await getObjectFromJSON(
@@ -334,7 +333,7 @@
       );
       // add the full path as a property
       attr.path = path;
-      dsetObject = parseDatasetAttrs(attr);
+      let dsetObject = parseDatasetAttrs(attr);
       return Promise.resolve(dsetObject);
     });
     return Promise.all(datasets);
@@ -343,9 +342,9 @@
   const getViewerPosition = (dimensions, origins) => {
     // get the largest volume, then return the middle coordinate of that volume shifted by the origin
     let position = [];
-    volumes = dimensions.map(d => d.reduce((a, b) => a * b));
-    max_volume = Math.max.apply(null, volumes);
-    index = volumes.indexOf(max_volume);
+    let volumes = dimensions.map(d => d.reduce((a, b) => a * b));
+    let max_volume = Math.max.apply(null, volumes);
+    let index = volumes.indexOf(max_volume);
     position = origins[index].map(
       (val, idx) => val + dimensions[index][idx] / 2
     );
@@ -388,27 +387,27 @@
       );
 
       let transform = new Transform(
-        (matrix = [
+        [
           [1, 0, 0, obj.origin[0]],
           [0, 1, 0, obj.origin[1]],
           [0, 0, 1, obj.origin[2]]
-        ]),
-        (oD = outputDimensions),
-        (iD = {
+        ],
+        outputDimensions,
+        {
           x: [1e-9 * obj.gridSpacing[0], "m"],
           y: [1e-9 * obj.gridSpacing[1], "m"],
           z: [1e-9 * obj.gridSpacing[2], "m"]
-        })
+        }
       );
 
       let layer = new Layer(
-        (type = layerType),
-        (source = { url: sourceURL, transform: transform }),
-        (tab = "source"),
-        (skeletonRendering = skeletonRendering),
-        (shader = shader),
-        (name = obj.name),
-        (blend = "default")
+        layerType,
+        { url: sourceURL, transform: transform },
+        "source",
+        skeletonRendering,
+        shader,
+        obj.name,
+        "default"
       );
 
       layers.push(layer);
@@ -450,12 +449,15 @@
       state => neuroglancerAddress + encodeFragment(urlSafeStringify(state))
     );
     // update the dom
-    for (let idx = 0; idx < urls.length; idx ++) {
-      $("#ng_urls").append(`<li> <a href=${urls[idx]}>${n5Containers[idx]}</a></li>`);
+    for (let idx = 0; idx < urls.length; idx++) {
+      $("#ng_urls").append(
+        `<li> <a href=${urls[idx]}>${n5Containers[idx]}</a></li>`
+      );
     }
   };
 
   $(document).ready(() => {
-    (s3exp_lister = s3l(config, completecb)).go();
+    let s3exp_lister = s3l(config, completecb);
+    s3exp_lister.go();
   });
 </script>
